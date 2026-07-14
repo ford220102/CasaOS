@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	url2 "net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -184,7 +183,7 @@ func GetDownloadFile(ctx echo.Context) error {
 
 			// Get file name
 			fileName := path.Base(filePath)
-			ctx.Response().Header().Add("Content-Disposition", "attachment; filename*=utf-8''"+url2.PathEscape(fileName))
+			ctx.Response().Header().Add("Content-Disposition", "attachment; filename*=utf-8''"+url.PathEscape(fileName))
 			ctx.File(filePath)
 		}
 	}
@@ -231,7 +230,7 @@ func GetDownloadSingleFile(ctx echo.Context) error {
 		})
 	}
 	fileName := path.Base(filePath)
-	ctx.Request().Header.Add("Content-Disposition", "attachment; filename*=utf-8''"+url2.PathEscape(fileName))
+	ctx.Request().Header.Add("Content-Disposition", "attachment; filename*=utf-8''"+url.PathEscape(fileName))
 
 	fi, err := os.Open(filePath)
 	if err != nil {
