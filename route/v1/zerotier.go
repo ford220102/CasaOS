@@ -229,6 +229,31 @@ func GetZTIPs() []gjson.Result {
 	return a.Array()
 }
 
+// calculateIPRange oblicza zakres IP i zwraca ip, start, end, cidr
+func calculateIPRange(selectedCIDR string) (ip, start, end, cidr string) {
+	_, ipNet, err := net.ParseCIDR(selectedCIDR)
+	if err != nil {
+		logger.Error("ParseCIDR error", zap.Error(err))
+		return
+	}
+	cidr = selectedCIDR
+	startIP := ipNet.IP
+	endIP := make(net.IP, len(startIP))
+	copy(endIP, startIP)
+
+	for i := range startIP {
+		endIP[i] |= ^ipNet.Mask[i]
+	}
+	startIP[3] = 1
+	start = startIP.String()
+	endIP[3] = 254
+	end = endIP.String()
+	ipt := ipNet
+	ipt.IP[3] = 1
+	ip = ipt.IP.String()
+	return
+}
+
 func getZTIP(routes string) (ip, start, end, cidr string) {
 	excluded := GetZTIPs()
 	cidrs := []string{
@@ -281,63 +306,19 @@ func getZTIP(routes string) (ip, start, end, cidr string) {
 		}
 	}
 
-	ip = ""
-	if len(filteredCidrs) > 0 {
-		// Użyj crypto/rand zamiast math/rand dla bezpiecznego losowania
-		max := big.NewInt(int64(len(filteredCidrs)))
-		randomIndexBig, err := rand.Int(rand.Reader, max)
-		if err != nil {
-			logger.Error("crypto rand error", zap.Error(err))
-			// Fallback: użyj pierwszego dostępnego CIDR
-			selectedCIDR := filteredCidrs[0]
-			_, ipNet, err := net.ParseCIDR(selectedCIDR)
-			if err != nil {
-				logger.Error("ParseCIDR error", zap.Error(err))
-				return
-			}
-			cidr = selectedCIDR
-			startIP := ipNet.IP
-			endIP := make(net.IP, len(startIP))
-			copy(endIP, startIP)
-
-			for i := range startIP {
-				endIP[i] |= ^ipNet.Mask[i]
-			}
-			startIP[3] = 1
-			start = startIP.String()
-			endIP[3] = 254
-			end = endIP.String()
-			ipt := ipNet
-			ipt.IP[3] = 1
-			ip = ipt.IP.String()
-			return
-		}
-		
-		randomIndex := int(randomIndexBig.Int64())
-		selectedCIDR := filteredCidrs[randomIndex]
-		_, ipNet, err := net.ParseCIDR(selectedCIDR)
-		if err != nil {
-			logger.Error("ParseCIDR error", zap.Error(err))
-			return
-		}
-		cidr = selectedCIDR
-		startIP := ipNet.IP
-		endIP := make(net.IP, len(startIP))
-		copy(endIP, startIP)
-
-		for i := range startIP {
-			endIP[i] |= ^ipNet.Mask[i]
-		}
-		startIP[3] = 1
-		start = startIP.String()
-		endIP[3] = 254
-		end = endIP.String()
-		ipt := ipNet
-		ipt.IP[3] = 1
-		ip = ipt.IP.String()
-		return
-	} else {
+	if len(filteredCidrs) == 0 {
 		logger.Error("No available CIDR found")
+		return
 	}
-	return
+
+	// Wybierz losowy CIDR używając crypto/rand
+	max := big.NewInt(int64(len(filteredCidrs)))
+	randomIndexBig, err := rand.Int(rand.Reader, max)
+	if err != nil {
+		logger.Error("crypto rand error, using first available CIDR", zap.Error(err))
+		return calculateIPRange(filteredCidrs[0])
+	}
+
+	randomIndex := int(randomIndexBig.Int64())
+	return calculateIPRange(filteredCidrs[randomIndex])
 }
