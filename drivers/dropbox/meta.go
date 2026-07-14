@@ -25,18 +25,11 @@ var config = driver.Config{
 	DefaultRoot: "root",
 }
 
-// GetDropboxCredentials pobiera dane uwierzytelniające ze zmiennych środowiskowych,
-// zapobiegając wyciekowi kluczy w kodzie źródłowym.
+// GetDropboxCredentials pobiera dane uwierzytelniające wyłącznie z bezpiecznego środowiska.
+// Brak jakichkolwiek zahardkodowanych wartości (hardcoded secrets).
 func GetDropboxCredentials() (string, string) {
 	appKey := os.Getenv("DROPBOX_APP_KEY")
 	appSecret := os.Getenv("DROPBOX_APP_SECRET")
 
-	// Fallback na wypadek braku konfiguracji środowiskowej
-	if appKey == "" {
-		appKey = "tciqajyazzdygt9" // Możesz zachować jako fallback, lecz najbezpieczniej usunąć całkowicie
-	}
-	if appSecret == "" {
-		appSecret = "e7gtmv441cwdf0n"
-	}
 	return appKey, appSecret
 }
