@@ -89,11 +89,8 @@ func PostSambaSharesCreate(ctx echo.Context) error {
 		shareDBModel.Path = v.Path
 		shareDBModel.Name = filepath.Base(v.Path)
 
-		// Bezpieczne uprawnienia - tylko właściciel i grupa mają dostęp
-		// 750 = rwxr-x---: właściciel pełne, grupa odczyt/wykonanie, inni brak
-		if err := os.Chmod(v.Path, 0o750); err != nil {
-			logger.Error("failed to set permissions for share", zap.Error(err), zap.String("path", v.Path))
-		}
+		// Nie zmieniamy uprawnień - pozostawiamy istniejące
+		// Użytkownik sam zarządza uprawnieniami do swojego katalogu
 
 		service.MyService.Shares().CreateShare(shareDBModel)
 	}
