@@ -20,6 +20,13 @@ import (
 	"github.com/mholt/archiver/v3"
 )
 
+// Default permissions - use more restrictive defaults
+const (
+	defaultFilePerm  = 0o644 // rw-r--r--
+	defaultDirPerm   = 0o755 // rwxr-xr-x
+	defaultWritePerm = 0o600 // rw-------
+)
+
 // GetSize get the file size
 func GetSize(f multipart.File) (int, error) {
 	content, err := ioutil.ReadAll(f)
@@ -53,13 +60,14 @@ func IsNotExistMkDir(src string) error {
 	return nil
 }
 
-// MkDir create a directory
+// MkDir create a directory with safe permissions
 func MkDir(src string) error {
-	err := os.MkdirAll(src, os.ModePerm)
+	err := os.MkdirAll(src, defaultDirPerm)
 	if err != nil {
 		return err
 	}
-	return os.Chmod(src, 0o777)
+	// Only change permissions if it's not a permission issue
+	return os.Chmod(src, defaultDirPerm)
 }
 
 // RMDir remove a directory
@@ -75,8 +83,7 @@ func Open(name string, flag int, perm os.FileMode) (*os.File, error) {
 // MustOpen maximize trying to open the file
 func MustOpen(fileName, filePath string) (*os.File, error) {
 	src := filePath
-	perm := CheckPermission(src)
-	if perm {
+	if CheckPermission(src) {
 		return nil, fmt.Errorf("file.CheckPermission Permission denied src: %s", src)
 	}
 
@@ -85,7 +92,7 @@ func MustOpen(fileName, filePath string) (*os.File, error) {
 		return nil, fmt.Errorf("file.IsNotExistMkDir src: %s, err: %v", src, err)
 	}
 
-	f, err := Open(src+fileName, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0o644)
+	f, err := Open(src+fileName, os.O_APPEND|os.O_CREATE|os.O_RDWR, defaultFilePerm)
 	if err != nil {
 		return nil, fmt.Errorf("Fail to OpenFile :%v", err)
 	}
@@ -113,10 +120,18 @@ func IsFile(path string) bool {
 	return !IsDir(path)
 }
 
-// CreateFile creates a new file
+// CreateFile creates a new file with safe permissions
 func CreateFile(path string) error {
-	file, err := os.Create(path)
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL, defaultFilePerm)
 	if err != nil {
+		// If file exists, try with O_TRUNC instead
+		if os.IsExist(err) {
+			file, err = os.OpenFile(path, os.O_TRUNC|os.O_WRONLY, defaultFilePerm)
+			if err != nil {
+				return err
+			}
+			return file.Close()
+		}
 		return err
 	}
 	return file.Close()
@@ -124,7 +139,7 @@ func CreateFile(path string) error {
 
 // CreateFileAndWriteContent creates a file and writes content to it
 func CreateFileAndWriteContent(path string, content string) error {
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0o666)
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, defaultWritePerm)
 	if err != nil {
 		return err
 	}
@@ -174,7 +189,8 @@ func copyFileInternal(src, dst string, handleExisting func(string) error) error 
 	}
 	defer srcfd.Close()
 
-	dstfd, err := os.Create(dst)
+	// Create with safe permissions
+	dstfd, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, defaultFilePerm)
 	if err != nil {
 		return err
 	}
@@ -188,7 +204,15 @@ func copyFileInternal(src, dst string, handleExisting func(string) error) error 
 	if err != nil {
 		return err
 	}
-	return os.Chmod(dst, srcinfo.Mode())
+	
+	// Only copy permissions if they're safe
+	mode := srcinfo.Mode()
+	if mode&0o0777 != 0 {
+		// Mask out potentially dangerous permissions
+		mode = mode &^ 0o7777
+		mode |= defaultFilePerm
+	}
+	return os.Chmod(dst, mode)
 }
 
 // handleExistingFile handles existing file based on style
@@ -258,7 +282,8 @@ func CopyDir(src string, dst string, style string) error {
 		}
 	}
 
-	if err = os.MkdirAll(dst, srcinfo.Mode()); err != nil {
+	// Use safe directory permissions
+	if err = os.MkdirAll(dst, defaultDirPerm); err != nil {
 		return err
 	}
 
@@ -290,7 +315,7 @@ func WriteToPath(data []byte, path, name string) error {
 	} else {
 		fullPath += "/" + name
 	}
-	return WriteToFullPath(data, fullPath, 0o666)
+	return WriteToFullPath(data, fullPath, defaultWritePerm)
 }
 
 // WriteToFullPath writes data to a file with full path
@@ -317,7 +342,7 @@ func SpliceFiles(dir, path string, length int, startPoint int) error {
 		return err
 	}
 
-	file, err := os.OpenFile(fullPath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0o666)
+	file, err := os.OpenFile(fullPath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, defaultWritePerm)
 	if err != nil {
 		return err
 	}
@@ -479,7 +504,7 @@ func MoveFile(sourcePath, destPath string) error {
 	}
 	defer inputFile.Close()
 
-	outputFile, err := os.Create(destPath)
+	outputFile, err := os.OpenFile(destPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, defaultWritePerm)
 	if err != nil {
 		return fmt.Errorf("Couldn't open dest file: %s", err)
 	}
