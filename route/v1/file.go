@@ -35,6 +35,12 @@ import (
 	"github.com/h2non/filetype"
 )
 
+// Constants for HTTP headers to avoid duplication
+const (
+	headerContentDisposition = "Content-Disposition"
+	contentDispositionValue  = "attachment; filename*=utf-8''"
+)
+
 type ListReq struct {
 	model.PageReq
 	Path string `json:"path" form:"path"`
@@ -183,7 +189,7 @@ func GetDownloadFile(ctx echo.Context) error {
 
 			// Get file name
 			fileName := path.Base(filePath)
-			ctx.Response().Header().Add("Content-Disposition", "attachment; filename*=utf-8''"+url.PathEscape(fileName))
+			ctx.Response().Header().Add(headerContentDisposition, contentDispositionValue+url.PathEscape(fileName))
 			ctx.File(filePath)
 		}
 	}
@@ -211,7 +217,7 @@ func GetDownloadFile(ctx echo.Context) error {
 
 	name := "_" + currentPath
 	name += extension
-	ctx.Request().Header.Add("Content-Disposition", "attachment; filename*=utf-8''"+url.PathEscape(name))
+	ctx.Request().Header.Add(headerContentDisposition, contentDispositionValue+url.PathEscape(name))
 	for _, fname := range list {
 		err = file.AddFile(ar, fname, commonDir)
 		if err != nil {
@@ -230,7 +236,7 @@ func GetDownloadSingleFile(ctx echo.Context) error {
 		})
 	}
 	fileName := path.Base(filePath)
-	ctx.Request().Header.Add("Content-Disposition", "attachment; filename*=utf-8''"+url.PathEscape(fileName))
+	ctx.Request().Header.Add(headerContentDisposition, contentDispositionValue+url.PathEscape(fileName))
 
 	fi, err := os.Open(filePath)
 	if err != nil {
