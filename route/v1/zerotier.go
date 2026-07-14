@@ -1,9 +1,10 @@
 package v1
 
 import (
+	"crypto/rand"
 	"fmt"
 	"io/ioutil"
-	"math/rand"
+	"math/big"
 	"net"
 	"net/http"
 	"strings"
@@ -280,10 +281,39 @@ func getZTIP(routes string) (ip, start, end, cidr string) {
 		}
 	}
 
-	rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
 	ip = ""
 	if len(filteredCidrs) > 0 {
-		randomIndex := rnd.Intn(len(filteredCidrs))
+		// Użyj crypto/rand zamiast math/rand dla bezpiecznego losowania
+		max := big.NewInt(int64(len(filteredCidrs)))
+		randomIndexBig, err := rand.Int(rand.Reader, max)
+		if err != nil {
+			logger.Error("crypto rand error", zap.Error(err))
+			// Fallback: użyj pierwszego dostępnego CIDR
+			selectedCIDR := filteredCidrs[0]
+			_, ipNet, err := net.ParseCIDR(selectedCIDR)
+			if err != nil {
+				logger.Error("ParseCIDR error", zap.Error(err))
+				return
+			}
+			cidr = selectedCIDR
+			startIP := ipNet.IP
+			endIP := make(net.IP, len(startIP))
+			copy(endIP, startIP)
+
+			for i := range startIP {
+				endIP[i] |= ^ipNet.Mask[i]
+			}
+			startIP[3] = 1
+			start = startIP.String()
+			endIP[3] = 254
+			end = endIP.String()
+			ipt := ipNet
+			ipt.IP[3] = 1
+			ip = ipt.IP.String()
+			return
+		}
+		
+		randomIndex := int(randomIndexBig.Int64())
 		selectedCIDR := filteredCidrs[randomIndex]
 		_, ipNet, err := net.ParseCIDR(selectedCIDR)
 		if err != nil {
