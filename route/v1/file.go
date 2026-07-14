@@ -65,9 +65,9 @@ type FsListResp struct {
 }
 
 var (
-	// 升级成 WebSocket 协议
+	// Upgrade to WebSocket protocol
 	upgraderFile = websocket.Upgrader{
-		// 允许CORS跨域请求
+		// Allow CORS cross-origin requests
 		CheckOrigin: func(r *http.Request) bool {
 			return true
 		},
@@ -76,12 +76,12 @@ var (
 	err  error
 )
 
-// @Summary 读取文件
+// @Summary Read file content
 // @Produce  application/json
 // @Accept application/json
 // @Tags file
 // @Security ApiKeyAuth
-// @Param path query string true "路径"
+// @Param path query string true "path"
 // @Success 200 {string} string "ok"
 // @Router /file/read [get]
 func GetFilerContent(ctx echo.Context) error {
@@ -98,7 +98,7 @@ func GetFilerContent(ctx echo.Context) error {
 			Message: common_err.GetMsg(common_err.FILE_DOES_NOT_EXIST),
 		})
 	}
-	// 文件读取任务是将文件内容读取到内存中。
+	// File reading task reads file content into memory.
 	info, err := ioutil.ReadFile(filePath)
 	if err != nil {
 		return ctx.JSON(common_err.SERVICE_ERROR, model.Result{
@@ -133,7 +133,7 @@ func GetLocalFile(ctx echo.Context) error {
 	return ctx.File(path)
 }
 
-// @Summary download
+// @Summary Download file(s)
 // @Produce  application/json
 // @Accept application/json
 // @Tags file
@@ -178,11 +178,11 @@ func GetDownloadFile(ctx echo.Context) error {
 		}
 		if !info.IsDir() {
 
-			// 打开文件
+			// Open file
 			fileTmp, _ := os.Open(filePath)
 			defer fileTmp.Close()
 
-			// 获取文件的名称
+			// Get file name
 			fileName := path.Base(filePath)
 			ctx.Response().Header().Add("Content-Disposition", "attachment; filename*=utf-8''"+url2.PathEscape(fileName))
 			ctx.File(filePath)
@@ -231,7 +231,6 @@ func GetDownloadSingleFile(ctx echo.Context) error {
 		})
 	}
 	fileName := path.Base(filePath)
-	// c.Header("Content-Disposition", "inline")
 	ctx.Request().Header.Add("Content-Disposition", "attachment; filename*=utf-8''"+url2.PathEscape(fileName))
 
 	fi, err := os.Open(filePath)
@@ -270,12 +269,12 @@ func GetDownloadSingleFile(ctx echo.Context) error {
 	return nil
 }
 
-// @Summary 获取目录列表
+// @Summary Get directory list
 // @Produce  application/json
 // @Accept application/json
 // @Tags file
 // @Security ApiKeyAuth
-// @Param path query string false "路径"
+// @Param path query string false "path"
 // @Success 200 {string} string "ok"
 // @Router /file/dirpath [get]
 func DirPath(ctx echo.Context) error {
@@ -292,10 +291,6 @@ func DirPath(ctx echo.Context) error {
 	for _, v := range shares {
 		sharesMap[v.Path] = fmt.Sprint(v.ID)
 	}
-	// if len(info) <= (req.Page-1)*req.Size {
-	// 	return ctx.JSON(common_err.CLIENT_ERROR, model.Result{Success: common_err.CLIENT_ERROR, Message: common_err.GetMsg(common_err.INVALID_PARAMS), Data: "page out of range"})
-	// 	return
-	// }
 	forEnd := req.Index * req.Size
 	if forEnd > len(info) {
 		forEnd = len(info)
@@ -359,16 +354,13 @@ func DirPath(ctx echo.Context) error {
 	flist := FsListResp{
 		Content: pathList,
 		Total:   int64(len(info)),
-		// Readme:   "",
-		// Write:    true,
-		// Provider: "local",
-		Index: req.Index,
-		Size:  req.Size,
+		Index:   req.Index,
+		Size:    req.Size,
 	}
 	return ctx.JSON(common_err.SUCCESS, model.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS), Data: flist})
 }
 
-// @Summary rename file or dir
+// @Summary Rename file or directory
 // @Produce  application/json
 // @Accept application/json
 // @Tags file
@@ -394,7 +386,7 @@ func RenamePath(ctx echo.Context) error {
 	return ctx.JSON(common_err.SUCCESS, model.Result{Success: success, Message: common_err.GetMsg(success), Data: err})
 }
 
-// @Summary create folder
+// @Summary Create folder
 // @Produce  application/json
 // @Accept  application/json
 // @Tags file
@@ -410,16 +402,11 @@ func MkdirAll(ctx echo.Context) error {
 	if len(path) == 0 {
 		return ctx.JSON(common_err.CLIENT_ERROR, model.Result{Success: common_err.INVALID_PARAMS, Message: common_err.GetMsg(common_err.INVALID_PARAMS)})
 	}
-	// decodedPath, err := url.QueryUnescape(path)
-	// if err != nil {
-	// 	return ctx.JSON(http.StatusOK, model.Result{Success: common_err.INVALID_PARAMS, Message: common_err.GetMsg(common_err.INVALID_PARAMS)})
-	// 	return
-	// }
 	code, _ = service.MyService.System().MkdirAll(path)
 	return ctx.JSON(common_err.SUCCESS, model.Result{Success: code, Message: common_err.GetMsg(code)})
 }
 
-// @Summary create file
+// @Summary Create file
 // @Produce  application/json
 // @Accept  application/json
 // @Tags file
@@ -435,16 +422,11 @@ func PostCreateFile(ctx echo.Context) error {
 	if len(path) == 0 {
 		return ctx.JSON(common_err.CLIENT_ERROR, model.Result{Success: common_err.INVALID_PARAMS, Message: common_err.GetMsg(common_err.INVALID_PARAMS)})
 	}
-	// decodedPath, err := url.QueryUnescape(path)
-	// if err != nil {
-	// 	return ctx.JSON(http.StatusOK, model.Result{Success: common_err.INVALID_PARAMS, Message: common_err.GetMsg(common_err.INVALID_PARAMS)})
-	// 	return
-	// }
 	code, _ = service.MyService.System().CreateFile(path)
 	return ctx.JSON(common_err.SUCCESS, model.Result{Success: code, Message: common_err.GetMsg(code)})
 }
 
-// @Summary upload file
+// @Summary Upload file (check)
 // @Produce  application/json
 // @Accept  application/json
 // @Tags file
@@ -478,7 +460,7 @@ func GetFileUpload(ctx echo.Context) error {
 	return ctx.JSON(204, model.Result{Success: 204, Message: common_err.GetMsg(common_err.SUCCESS)})
 }
 
-// @Summary upload file
+// @Summary Upload file
 // @Produce  application/json
 // @Accept  multipart/form-data
 // @Tags file
@@ -536,7 +518,7 @@ func PostFileUpload(ctx echo.Context) error {
 
 		defer out.Close()
 
-		if _, err := io.Copy(out, f); err != nil { // recommend to use https://github.com/iceber/iouring-go for faster copy
+		if _, err := io.Copy(out, f); err != nil {
 			logger.Error("error when trying to write to `"+tempDir+chunkNumber+"`", zap.Error(err))
 			return ctx.JSON(http.StatusInternalServerError, model.Result{Success: common_err.SERVICE_ERROR, Message: err.Error()})
 		}
@@ -568,7 +550,7 @@ func PostFileUpload(ctx echo.Context) error {
 
 		defer out.Close()
 
-		if _, err := io.Copy(out, f); err != nil { // recommend to use https://github.com/iceber/iouring-go for faster copy
+		if _, err := io.Copy(out, f); err != nil {
 			logger.Error("error when trying to write to `"+path+"`", zap.Error(err))
 			return ctx.JSON(http.StatusInternalServerError, model.Result{Success: common_err.SERVICE_ERROR, Message: common_err.GetMsg(common_err.SERVICE_ERROR), Data: err.Error()})
 		}
@@ -633,7 +615,7 @@ func PostFileOctet(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, model.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS)})
 }
 
-// @Summary copy or move file
+// @Summary Copy or move file
 // @Produce  application/json
 // @Accept  application/json
 // @Tags file
@@ -686,7 +668,7 @@ func PostOperateFileOrDir(ctx echo.Context) error {
 	return ctx.JSON(common_err.SUCCESS, model.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS)})
 }
 
-// @Summary delete file
+// @Summary Delete file
 // @Produce  application/json
 // @Accept  application/json
 // @Tags file
@@ -700,9 +682,6 @@ func DeleteFile(ctx echo.Context) error {
 	if len(paths) == 0 {
 		return ctx.JSON(common_err.CLIENT_ERROR, model.Result{Success: common_err.INVALID_PARAMS, Message: common_err.GetMsg(common_err.INVALID_PARAMS)})
 	}
-	//	path := ctx.QueryParam("path")
-
-	//	paths := strings.Split(path, ",")
 	for _, v := range paths {
 		mounted := service.IsMounted(v)
 		if mounted {
@@ -720,7 +699,7 @@ func DeleteFile(ctx echo.Context) error {
 	return ctx.JSON(common_err.SUCCESS, model.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS)})
 }
 
-// @Summary update file
+// @Summary Update file content
 // @Produce  application/json
 // @Accept  application/json
 // @Tags file
@@ -733,12 +712,9 @@ func PutFileContent(ctx echo.Context) error {
 	fi := model.FileUpdate{}
 	ctx.Bind(&fi)
 
-	// path := ctx.FormValue("path")
-	// content := ctx.FormValue("content")
 	if !file.Exists(fi.FilePath) {
 		return ctx.JSON(common_err.SERVICE_ERROR, model.Result{Success: common_err.FILE_ALREADY_EXISTS, Message: common_err.GetMsg(common_err.FILE_ALREADY_EXISTS)})
 	}
-	// err := os.Remove(path)
 	f, err := os.Stat(fi.FilePath)
 	if err != nil {
 		return ctx.JSON(common_err.SERVICE_ERROR, model.Result{Success: common_err.FILE_ALREADY_EXISTS, Message: common_err.GetMsg(common_err.FILE_ALREADY_EXISTS)})
@@ -755,7 +731,7 @@ func PutFileContent(ctx echo.Context) error {
 	return ctx.JSON(common_err.SUCCESS, model.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS)})
 }
 
-// @Summary image thumbnail/original image
+// @Summary Image thumbnail/original image
 // @Produce  application/json
 // @Accept  application/json
 // @Tags file
@@ -835,20 +811,20 @@ func GetFileCount(ctx echo.Context) error {
 }
 
 type CenterHandler struct {
-	// 广播通道，有数据则循环每个用户广播出去
+	// Broadcast channel - broadcasts data to all users
 	broadcast chan []byte
-	// 注册通道，有用户进来 则推到用户集合map中
+	// Register channel - adds new users to the clients map
 	register chan *Client
-	// 注销通道，有用户关闭连接 则将该用户剔出集合map中
+	// Unregister channel - removes disconnected users from the clients map
 	unregister chan *Client
-	// 用户集合，每个用户本身也在跑两个协程，监听用户的读、写的状态
+	// Clients map - each user runs two goroutines monitoring read/write status
 	clients map[string]*Client
 }
 
 type Client struct {
 	handler *CenterHandler
 	conn    *websocket.Conn
-	// 每个用户自己的循环跑起来的状态监控
+	// Each user's own channel for monitoring status
 	send         chan []byte
 	ID           string       `json:"id"`
 	IP           string       `json:"ip"`
@@ -869,7 +845,6 @@ func ConnectWebSocket(ctx echo.Context) error {
 	writer := ctx.Response().Writer
 	request := ctx.Request()
 	key := uuid.NewString()
-	// peerModel := service.MyService.Peer().GetPeerByUserAgent(ctx.Request().UserAgent())
 	peerModel := model2.PeerDriveDBModel{}
 	name := service.GetName(request)
 	if conn, err = upgraderFile.Upgrade(writer, request, writer.Header()); err != nil {
@@ -900,10 +875,15 @@ func ConnectWebSocket(ctx echo.Context) error {
 		list = append(list, peerModel)
 	}
 
+	// Secure cookie - fix for go:S2092
+	isSecure := ctx.Request().TLS != nil || ctx.Request().Header.Get("X-Forwarded-Proto") == "https"
 	cookie := http.Cookie{
-		Name:  "peerid",
-		Value: key,
-		Path:  "/",
+		Name:     "peerid",
+		Value:    key,
+		Path:     "/",
+		Secure:   isSecure,   // Only send over HTTPS
+		HttpOnly: true,       // Not accessible via JavaScript (XSS protection)
+		SameSite: http.SameSiteStrictMode, // CSRF protection
 	}
 	http.SetCookie(writer, &cookie)
 	if len(list) > 10 {
@@ -916,18 +896,10 @@ func ConnectWebSocket(ctx echo.Context) error {
 				service.MyService.Peer().DeletePeer(list[i].ID)
 			}
 		}
-		// if len(kickoutList) > 0 {
-		// 	other := make(map[string]interface{})
-		// 	other["type"] = "kickout"
-		// 	other["peers"] = kickoutList
-		// 	otherBy, err := json.Marshal(other)
-		// 	fmt.Println(err)
-		// 	client.handler.broadcast <- otherBy
-		// }
 	}
 	list = service.MyService.Peer().GetPeers()
 	if len(list) > 10 {
-		fmt.Println("解决完后依然有溢出", list)
+		fmt.Println("still overflow after resolution", list)
 	}
 	currentPeer := PeerModel{ID: client.ID, Name: client.Name, RtcSupported: client.RtcSupported}
 	pmsg := make(map[string]interface{})
@@ -938,7 +910,6 @@ func ConnectWebSocket(ctx echo.Context) error {
 	for _, v := range handler.clients {
 		v.send <- pby
 	}
-	// client.handler.broadcast <- pby
 	clients := []PeerModel{}
 	for _, v := range client.handler.clients {
 		if _, ok := handler.clients[v.ID]; ok {
@@ -953,7 +924,7 @@ func ConnectWebSocket(ctx echo.Context) error {
 	fmt.Println(err)
 	client.send <- otherBy
 
-	// 推给监控中心注册到用户集合中
+	// Register with monitoring center
 	handler.register <- client
 
 	client.send <- []byte(`{"type":"ping"}`)
@@ -968,7 +939,7 @@ func ConnectWebSocket(ctx echo.Context) error {
 	by, _ := json.Marshal(msg)
 	client.send <- by
 
-	// 每个 client 都挂起 2 个新的协程，监控读、写状态
+	// Each client spawns 2 goroutines to monitor read/write status
 	go client.writePump()
 	go client.readPump()
 	return ctx.JSON(common_err.SUCCESS, model.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS)})
@@ -982,78 +953,58 @@ var handler = CenterHandler{
 }
 
 func init() {
-	// 起个协程跑起来，监听注册、注销、消息 3 个 channel
+	// Start goroutine to monitor register, unregister, and message channels
 	go handler.monitoring()
 
-	crontab := cron.New(cron.WithSeconds()) // 精确到秒
-	// 定义定时器调用的任务函数
+	crontab := cron.New(cron.WithSeconds()) // Precise to seconds
 
 	task := func() {
 		handler.broadcast <- []byte(`{"type":"ping"}`)
 	}
-	// 定时任务
-	spec := "*/30 * * * * ?" // cron表达式，每五秒一次
-	// 添加定时任务,
+	// Schedule task every 30 seconds
+	spec := "*/30 * * * * ?"
 	crontab.AddFunc(spec, task)
-	// 启动定时器
 	crontab.Start()
 }
 
 func (c *Client) writePump() {
 	defer func() {
 		c.handler.unregister <- c
-
 		c.conn.Close()
 	}()
 	for {
-		// 广播推过来的新消息，马上通过websocket推给自己
+		// Broadcast pushes new messages, immediately push via websocket
 		message, _ := <-c.send
-		fmt.Println("推送消息", string(message), "1")
+		fmt.Println("pushing message", string(message), "1")
 		if err := c.conn.WriteMessage(websocket.TextMessage, message); err != nil {
 			return
 		}
 	}
 }
 
-// 读，监听客户端是否有推送内容过来服务端
+// Read - monitor if client pushes content to server
 func (c *Client) readPump() {
 	defer func() {
 		c.handler.unregister <- c
 		c.conn.Close()
 	}()
 	for {
-		// 循环监听是否该用户是否要发言
+		// Loop to check if user wants to send a message
 		_, message, err := c.conn.ReadMessage()
 		if err != nil {
-			// 异常关闭的处理
+			// Handle abnormal closure
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Printf("error: %v", err)
 			}
 			c.handler.broadcast <- []byte(`{"type":"peer-left","peerId":"` + c.ID + `"}`)
 			break
 		}
-		// 要的话，推给广播中心，广播中心再推给每个用户
 
 		t := gjson.GetBytes(message, "type")
 		if t.String() == "disconnect" {
 			c.handler.unregister <- c
 			c.conn.Close()
-			// clients := []Client{}
-			// list := service.MyService.Peer().GetPeers()
-			// for _, v := range list {
-			// 	if _, ok := handler.clients[v.ID]; ok {
-			// 		clients = append(clients, *handler.clients[v.ID])
-			// 	} else {
-			// 		clients = append(clients, Client{ID: v.ID, Name: service.GetNameByDB(v), IP: v.IP, Offline: true})
-			// 	}
-			// }
-			// other := make(map[string]interface{})
-			// other["type"] = "peers"
-			// other["peers"] = clients
-			// otherBy, err := json.Marshal(other)
-			// fmt.Println(err)
 			c.handler.broadcast <- []byte(`{"type":"peer-left","peerId":"` + c.ID + `"}`)
-			// c.handler.broadcast <- otherBy
 			break
 		} else if t.String() == "pong" {
 			c.LastBeat = time.Now()
@@ -1082,16 +1033,16 @@ func (c *Client) readPump() {
 func (ch *CenterHandler) monitoring() {
 	for {
 		select {
-		// 注册，新用户连接过来会推进注册通道，这里接收推进来的用户指针
+		// Register - new user connects, add to clients map
 		case client := <-ch.register:
 			ch.clients[client.ID] = client
-			// 注销，关闭连接或连接异常会将用户推出群聊
+		// Unregister - connection closed or error, remove from clients map
 		case client := <-ch.unregister:
 			delete(ch.clients, client.ID)
-			// 消息，监听到有新消息到来
+		// Message - new message arrives
 		case message := <-ch.broadcast:
-			println("消息来了，message：" + string(message))
-			// 推送给每个用户的通道，每个用户都有跑协程起了writePump的监听
+			println("message received, message:" + string(message))
+			// Push to each user's channel - each user has a writePump goroutine listening
 			for _, client := range ch.clients {
 				client.send <- message
 			}
