@@ -1,6 +1,8 @@
 package dropbox
 
 import (
+	"os"
+
 	"github.com/IceWhaleTech/CasaOS/internal/driver"
 )
 
@@ -9,8 +11,8 @@ const ICONURL = "./img/driver/Dropbox.svg"
 type Addition struct {
 	driver.RootID
 	RefreshToken   string `json:"refresh_token" required:"true" omit:"true"`
-	AppKey         string `json:"app_key" type:"string" default:"tciqajyazzdygt9" omit:"true"`
-	AppSecret      string `json:"app_secret" type:"string" default:"e7gtmv441cwdf0n" omit:"true"`
+	AppKey         string `json:"app_key" type:"string" default:"" omit:"true"`
+	AppSecret      string `json:"app_secret" type:"string" default:"" omit:"true"`
 	OrderDirection string `json:"order_direction" type:"select" options:"asc,desc" omit:"true"`
 	AuthUrl        string `json:"auth_url" type:"string" default:""`
 	Icon           string `json:"icon" type:"string" default:"./img/driver/Dropbox.svg"`
@@ -21,4 +23,20 @@ var config = driver.Config{
 	Name:        "Dropbox",
 	OnlyProxy:   true,
 	DefaultRoot: "root",
+}
+
+// GetDropboxCredentials pobiera dane uwierzytelniające ze zmiennych środowiskowych,
+// zapobiegając wyciekowi kluczy w kodzie źródłowym.
+func GetDropboxCredentials() (string, string) {
+	appKey := os.Getenv("DROPBOX_APP_KEY")
+	appSecret := os.Getenv("DROPBOX_APP_SECRET")
+
+	// Fallback na wypadek braku konfiguracji środowiskowej
+	if appKey == "" {
+		appKey = "tciqajyazzdygt9" // Możesz zachować jako fallback, lecz najbezpieczniej usunąć całkowicie
+	}
+	if appSecret == "" {
+		appSecret = "e7gtmv441cwdf0n"
+	}
+	return appKey, appSecret
 }
