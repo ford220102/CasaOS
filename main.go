@@ -4,7 +4,8 @@ package main
 
 import (
 	"context"
-	_ "embed"
+	_ "embed" // required for the //go:embed directives below (_docHTML, _docYAML, _confSample);
+	// the embed package itself is never referenced directly in code
 	"flag"
 	"fmt"
 	"net"
