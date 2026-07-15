@@ -1,4 +1,4 @@
- package file
+package file
 
 import (
 	"bufio"
@@ -103,8 +103,7 @@ func Open(name string, flag int, perm os.FileMode) (*os.File, error) {
 // MustOpen maximize trying to open the file
 func MustOpen(fileName, filePath string) (*os.File, error) {
 	src := filePath
-	perm := CheckPermission(src)
-	if perm == true {
+	if CheckPermission(src) {
 		return nil, fmt.Errorf("file.CheckPermission Permission denied src: %s", src)
 	}
 
@@ -157,7 +156,7 @@ func CreateFile(path string) error {
 	return nil
 }
 
-func CreateFileAndWriteContent(path string, content string) error {
+func CreateFileAndWriteContent(path, content string) error {
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0o600)
 	if err != nil {
 		return err
@@ -263,7 +262,7 @@ func GetNoDuplicateFileName(fullPath string) string {
 }
 
 // Dir copies a whole directory recursively
-func CopyDir(src string, dst string, style string) error {
+func CopyDir(src, dst, style string) error {
 	var err error
 	var fds []os.FileInfo
 	var srcinfo os.FileInfo
@@ -541,7 +540,7 @@ func ReadLine(lineNumber int, path string) string {
 	return ""
 }
 
-func NameAccumulation(name string, dir string) string {
+func NameAccumulation(name, dir string) string {
 	path := filepath.Join(dir, name)
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return name
@@ -560,7 +559,7 @@ func NameAccumulation(name string, dir string) string {
 	}
 }
 
-func ParseFileHeader(h []byte, boundary []byte) (map[string]string, bool) {
+func ParseFileHeader(h, boundary []byte) (map[string]string, bool) {
 	arr := bytes.Split(h, boundary)
 	result := make(map[string]string)
 	for _, item := range arr {
@@ -645,7 +644,6 @@ func ParseFromHead(read_data []byte, read_total int, boundary []byte, stream io.
 			continue
 		}
 		file_head_loc += start_loc
-		ret := false
 		headMap, ret := ParseFileHeader(read_data, boundary)
 		if !ret {
 			return headMap, nil, fmt.Errorf("ParseFileHeader fail:%s", string(read_data[start_loc:file_head_loc]))
