@@ -593,7 +593,11 @@ func ParseFileHeader(h, boundary []byte) (map[string]string, bool) {
 	return result, true
 }
 
-// readStreamChunk reads a chunk from the stream
+// ============================================================
+// Nowy, prosty kod dla ParseFromHead – podzielony na 3 funkcje
+// ============================================================
+
+// readStreamChunk czyta kawałek danych ze strumienia
 func readStreamChunk(stream io.ReadCloser, buf []byte) (int, error) {
 	readLen, err := stream.Read(buf)
 	if err != nil && err != io.EOF {
@@ -602,12 +606,12 @@ func readStreamChunk(stream io.ReadCloser, buf []byte) (int, error) {
 	return readLen, nil
 }
 
-// locateBoundary finds the boundary in the data buffer
+// locateBoundary znajduje granicę w buforze danych
 func locateBoundary(data, boundary []byte, readTotal int) int {
 	return bytes.LastIndex(data[:readTotal], boundary)
 }
 
-// extractHeaderFromData extracts header map and remaining data
+// extractHeaderFromData wyciąga nagłówek z danych
 func extractHeaderFromData(data, boundary []byte, readTotal, boundaryLoc int) (map[string]string, []byte, bool, error) {
 	startLoc := boundaryLoc + len(boundary)
 	fileHeadLoc := bytes.Index(data[startLoc:readTotal], []byte("\r\n\r\n"))
@@ -623,52 +627,7 @@ func extractHeaderFromData(data, boundary []byte, readTotal, boundaryLoc int) (m
 	return headMap, data[fileHeadLoc+4 : readTotal], true, nil
 }
 
-// processBoundaryData handles the core logic of reading until a boundary is found
-func processBoundaryData(boundary []byte, stream io.ReadCloser, target io.WriteCloser) ([]byte, bool, error) {
-	readData := make([]byte, 1024*8)
-	readDataLen := 0
-	buf := make([]byte, 1024*4)
-	bLen := len(boundary)
-	reachEnd := false
-
-	for !reachEnd {
-		readLen, err := readStreamChunk(stream, buf)
-		if err != nil {
-			return nil, true, err
-		}
-		if readLen <= 0 {
-			reachEnd = true
-			continue
-		}
-
-		copy(readData[readDataLen:], buf[:readLen])
-		readDataLen += readLen
-
-		if readDataLen < bLen+4 {
-			continue
-		}
-
-		loc := bytes.Index(readData[:readDataLen], boundary)
-		if loc >= 0 {
-			target.Write(readData[:loc-4])
-			return readData[loc:readDataLen], reachEnd, nil
-		}
-
-		target.Write(readData[:readDataLen-bLen-4])
-		copy(readData[0:], readData[readDataLen-bLen-4:])
-		readDataLen = bLen + 4
-	}
-
-	target.Write(readData[:readDataLen])
-	return nil, reachEnd, nil
-}
-
-// ReadToBoundary reads data from stream until a boundary is found
-func ReadToBoundary(boundary []byte, stream io.ReadCloser, target io.WriteCloser) ([]byte, bool, error) {
-	return processBoundaryData(boundary, stream, target)
-}
-
-// ParseFromHead parses the file header from the beginning of the stream
+// ParseFromHead parsuje nagłówek pliku z początku strumienia
 func ParseFromHead(readData []byte, readTotal int, boundary []byte, stream io.ReadCloser) (map[string]string, []byte, error) {
 	buf := make([]byte, 1024*8)
 	foundBoundary := false
@@ -708,4 +667,53 @@ func ParseFromHead(readData []byte, readTotal int, boundary []byte, stream io.Re
 	}
 
 	return nil, nil, fmt.Errorf("reach to stream EOF")
+}
+
+// ============================================================
+// Poprawiona funkcja ReadToBoundary – podzielona na 2 funkcje
+// ============================================================
+
+// processBoundaryData obsługuje główną logikę odczytu do znalezienia granicy
+func processBoundaryData(boundary []byte, stream io.ReadCloser, target io.WriteCloser) ([]byte, bool, error) {
+	readData := make([]byte, 1024*8)
+	readDataLen := 0
+	buf := make([]byte, 1024*4)
+	bLen := len(boundary)
+	reachEnd := false
+
+	for !reachEnd {
+		readLen, err := readStreamChunk(stream, buf)
+		if err != nil {
+			return nil, true, err
+		}
+		if readLen <= 0 {
+			reachEnd = true
+			continue
+		}
+
+		copy(readData[readDataLen:], buf[:readLen])
+		readDataLen += readLen
+
+		if readDataLen < bLen+4 {
+			continue
+		}
+
+		loc := bytes.Index(readData[:readDataLen], boundary)
+		if loc >= 0 {
+			target.Write(readData[:loc-4])
+			return readData[loc:readDataLen], reachEnd, nil
+		}
+
+		target.Write(readData[:readDataLen-bLen-4])
+		copy(readData[0:], readData[readDataLen-bLen-4:])
+		readDataLen = bLen + 4
+	}
+
+	target.Write(readData[:readDataLen])
+	return nil, reachEnd, nil
+}
+
+// ReadToBoundary czyta dane ze strumienia do znalezienia granicy
+func ReadToBoundary(boundary []byte, stream io.ReadCloser, target io.WriteCloser) ([]byte, bool, error) {
+	return processBoundaryData(boundary, stream, target)
 }
