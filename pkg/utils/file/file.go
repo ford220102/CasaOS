@@ -121,7 +121,7 @@ func MustOpen(fileName, filePath string) (*os.File, error) {
 	return f, nil
 }
 
-// 判断所给路径文件/文件夹是否存在
+// Exists checks if a file or directory exists
 func Exists(path string) bool {
 	_, err := os.Stat(path)
 	if err != nil {
@@ -133,7 +133,7 @@ func Exists(path string) bool {
 	return true
 }
 
-// 判断所给路径是否为文件夹
+// IsDir checks if the given path is a directory
 func IsDir(path string) bool {
 	s, err := os.Stat(path)
 	if err != nil {
@@ -142,7 +142,7 @@ func IsDir(path string) bool {
 	return s.IsDir()
 }
 
-// 判断所给路径是否为文件
+// IsFile checks if the given path is a file
 func IsFile(path string) bool {
 	return !IsDir(path)
 }
@@ -156,7 +156,7 @@ func CreateFile(path string) error {
 	return nil
 }
 
-func CreateFileAndWriteContent(path string, content string) error {
+func CreateFileAndWriteContent(path, content string) error {
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0o666)
 	if err != nil {
 		return err
@@ -245,7 +245,7 @@ func CopySingleFile(src, dst, style string) error {
 	return copyFileContents(src, dst, style)
 }
 
-// Check for duplicate file names
+// GetNoDuplicateFileName checks for duplicate file names and returns a unique name
 func GetNoDuplicateFileName(fullPath string) string {
 	dirPath, fileName := filepath.Split(fullPath)
 	fileSuffix := path.Ext(fileName)
@@ -256,51 +256,73 @@ func GetNoDuplicateFileName(fullPath string) string {
 	return fullPath
 }
 
-// CopyDir copies a whole directory recursively
-func CopyDir(src string, dst string, style string) error {
-	var err error
-	var fds []os.FileInfo
-	var srcinfo os.FileInfo
+// prepareCopyDir prepares the destination path and handles existing directories
+func prepareCopyDir(src, dst, style string) (string, os.FileInfo, error) {
+	srcinfo, err := os.Stat(src)
+	if err != nil {
+		return "", nil, err
+	}
 
-	if srcinfo, err = os.Stat(src); err != nil {
-		return err
-	}
 	if !srcinfo.IsDir() {
-		if err = CopyFile(src, dst, style); err != nil {
-			fmt.Println(err)
-		}
-		return nil
+		return "", srcinfo, nil
 	}
+
 	lastPath := src[strings.LastIndex(src, "/")+1:]
-	dst += "/" + lastPath
+	dst = dst + "/" + lastPath
 
 	if Exists(dst) {
 		if style == "skip" {
-			return nil
+			return dst, srcinfo, fmt.Errorf("destination exists and style is skip")
 		}
 		os.Remove(dst)
 	}
+
 	if err = os.MkdirAll(dst, srcinfo.Mode()); err != nil {
+		return "", nil, err
+	}
+
+	return dst, srcinfo, nil
+}
+
+// processDirectoryContents processes all items in a directory for copying
+func processDirectoryContents(src, dst, style string, srcinfo os.FileInfo) error {
+	fds, err := ioutil.ReadDir(src)
+	if err != nil {
 		return err
 	}
-	if fds, err = ioutil.ReadDir(src); err != nil {
-		return err
-	}
+
 	for _, fd := range fds {
 		srcfp := path.Join(src, fd.Name())
-		dstfp := dst
 
 		if fd.IsDir() {
-			if err = CopyDir(srcfp, dstfp, style); err != nil {
+			if err := CopyDir(srcfp, dst, style); err != nil {
 				fmt.Println(err)
 			}
 		} else {
-			if err = CopyFile(srcfp, dstfp, style); err != nil {
+			if err := CopyFile(srcfp, dst, style); err != nil {
 				fmt.Println(err)
 			}
 		}
 	}
 	return nil
+}
+
+// CopyDir copies a whole directory recursively
+func CopyDir(src, dst, style string) error {
+	dstPath, srcinfo, err := prepareCopyDir(src, dst, style)
+	if err != nil {
+		// If style is "skip" and directory exists, this is acceptable
+		if strings.Contains(err.Error(), "style is skip") {
+			return nil
+		}
+		return err
+	}
+
+	if !srcinfo.IsDir() {
+		return CopyFile(src, dst, style)
+	}
+
+	return processDirectoryContents(src, dstPath, style, srcinfo)
 }
 
 func WriteToPath(data []byte, path, name string) error {
@@ -332,7 +354,7 @@ func WriteToFullPath(data []byte, fullPath string, perm fs.FileMode) error {
 }
 
 // SpliceFiles concatenates multiple file chunks into a single file
-func SpliceFiles(dir, path string, length int, startPoint int) error {
+func SpliceFiles(dir, path string, length, startPoint int) error {
 	fullPath := path
 
 	if err := IsNotExistCreateFile(fullPath); err != nil {
@@ -530,7 +552,7 @@ func ReadLine(lineNumber int, path string) string {
 	return ""
 }
 
-func NameAccumulation(name string, dir string) string {
+func NameAccumulation(name, dir string) string {
 	path := filepath.Join(dir, name)
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return name
@@ -567,7 +589,7 @@ func parseHeaderFields(item []byte) (string, string, bool) {
 }
 
 // ParseFileHeader parses file header from raw data
-func ParseFileHeader(h []byte, boundary []byte) (map[string]string, bool) {
+func ParseFileHeader(h, boundary []byte) (map[string]string, bool) {
 	arr := bytes.Split(h, boundary)
 	result := make(map[string]string)
 	for _, item := range arr {
@@ -624,12 +646,12 @@ func ReadToBoundary(boundary []byte, stream io.ReadCloser, target io.WriteCloser
 }
 
 // findBoundaryLoc finds the boundary location in the data
-func findBoundaryLoc(data []byte, boundary []byte, readTotal int) int {
+func findBoundaryLoc(data, boundary []byte, readTotal int) int {
 	return bytes.LastIndex(data[:readTotal], boundary)
 }
 
 // extractHeaderFromData extracts header map and remaining data
-func extractHeaderFromData(data []byte, boundary []byte, readTotal int) (map[string]string, []byte, bool, error) {
+func extractHeaderFromData(data, boundary []byte, readTotal int) (map[string]string, []byte, bool, error) {
 	boundaryLoc := findBoundaryLoc(data, boundary, readTotal)
 	if boundaryLoc == -1 {
 		return nil, nil, false, nil
