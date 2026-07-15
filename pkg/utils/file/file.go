@@ -12,7 +12,6 @@ import (
 	"mime/multipart"
 	"os"
 	"path"
-	path2 "path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -235,9 +234,9 @@ func CopyFile(src, dst, style string) error {
 	if srcinfo, err = os.Stat(src); err != nil {
 		return err
 	}
-	
+
 	// Przypisanie uprawnień z zachowaniem ostrożności (opcjonalnie można ograniczyć maską)
-	return os.Chmod(dst, srcinfo.Mode() & 0o750) 
+	return os.Chmod(dst, srcinfo.Mode()&0o750)
 }
 
 func CopySingleFile(src, dst, style string) error {
@@ -270,16 +269,16 @@ func CopySingleFile(src, dst, style string) error {
 	if srcinfo, err = os.Stat(src); err != nil {
 		return err
 	}
-	return os.Chmod(dst, srcinfo.Mode() & 0o750)
+	return os.Chmod(dst, srcinfo.Mode()&0o750)
 }
 
 // Check for duplicate file names
 func GetNoDuplicateFileName(fullPath string) string {
-	path, fileName := filepath.Split(fullPath)
-	fileSuffix := path2.Ext(fileName)
+	dirPath, fileName := filepath.Split(fullPath)
+	fileSuffix := path.Ext(fileName)
 	filenameOnly := strings.TrimSuffix(fileName, fileSuffix)
 	for i := 0; Exists(fullPath); i++ {
-		fullPath = path2.Join(path, filenameOnly+"("+strconv.Itoa(i+1)+")"+fileSuffix)
+		fullPath = path.Join(dirPath, filenameOnly+"("+strconv.Itoa(i+1)+")"+fileSuffix)
 	}
 	return fullPath
 }
@@ -310,7 +309,7 @@ func CopyDir(src string, dst string, style string) error {
 		}
 	}
 	// Tworzenie katalogu docelowego z bezpieczną maską
-	if err = os.MkdirAll(dst, srcinfo.Mode() & 0o750); err != nil {
+	if err = os.MkdirAll(dst, srcinfo.Mode()&0o750); err != nil {
 		return err
 	}
 	if fds, err = ioutil.ReadDir(src); err != nil {
@@ -350,7 +349,7 @@ func WriteToFullPath(data []byte, fullPath string, perm fs.FileMode) error {
 	}
 
 	// Filtrujemy przekazane uprawnienia, by zapobiec nadaniu world-writable
-	safePerm := perm & 0o750 
+	safePerm := perm & 0o750
 
 	file, err := os.OpenFile(fullPath,
 		os.O_WRONLY|os.O_TRUNC|os.O_CREATE,
