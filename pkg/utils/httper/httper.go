@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"time"
 
@@ -12,144 +11,115 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-// 发送GET请求
-// url:请求地址
-// response:请求返回的内容
-func Get(url string, head map[string]string) (response string) {
-	client := &http.Client{Timeout: 30 * time.Second}
-	req, err := http.NewRequest("GET", url, nil)
+// sharedClient is reused across calls instead of allocating a new
+// *http.Client (and its underlying transport/connection pool) per request.
+var sharedClient = &http.Client{Timeout: 30 * time.Second}
 
+// doRequest builds and executes an HTTP request, applying headers and a
+// per-call timeout. It centralizes the logic that was previously
+// duplicated across Get/PersonGet/Post/ZeroTierGet.
+func doRequest(method, url string, body []byte, contentType string, head map[string]string, timeout time.Duration) (content string, statusCode int, err error) {
+	var bodyReader io.Reader
+	if body != nil {
+		bodyReader = bytes.NewBuffer(body)
+	}
+
+	req, err := http.NewRequest(method, url, bodyReader)
+	if err != nil {
+		return "", 0, fmt.Errorf("httper: building request failed: %w", err)
+	}
+
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
 	for k, v := range head {
 		req.Header.Add(k, v)
 	}
-	if err != nil {
-		return ""
+
+	client := sharedClient
+	if timeout > 0 {
+		// clone timeout behavior without mutating the shared client
+		client = &http.Client{Timeout: timeout}
 	}
+
 	resp, err := client.Do(req)
+	if err != nil {
+		return "", 0, fmt.Errorf("httper: request to %s failed: %w", url, err)
+	}
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", resp.StatusCode, fmt.Errorf("httper: reading response body failed: %w", err)
+	}
+
+	return string(data), resp.StatusCode, nil
+}
+
+// Get sends a GET request.
+// url: request address
+// head: optional request headers
+// response: response body as a string (empty string on error)
+func Get(url string, head map[string]string) (response string) {
+	content, _, err := doRequest(http.MethodGet, url, nil, "", head, 30*time.Second)
 	if err != nil {
 		fmt.Println(err)
-		// 需要错误日志的处理
-		// logger.Error(error)
 		return ""
-		// panic(error)
 	}
-	defer resp.Body.Close()
-	var buffer [512]byte
-	result := bytes.NewBuffer(nil)
-	for {
-		n, err := resp.Body.Read(buffer[0:])
-		result.Write(buffer[0:n])
-		if err != nil && err == io.EOF {
-			break
-		} else if err != nil {
-			// logger.Error(err)
-			return ""
-			//	panic(err)
-		}
-	}
-	response = result.String()
-	return
+	return content
 }
 
-// 发送GET请求
-// url:请求地址
-// response:请求返回的内容
+// PersonGet sends a GET request with a shorter (5s) timeout.
 func PersonGet(url string) (response string) {
-	client := &http.Client{Timeout: 5 * time.Second}
-	req, err := http.NewRequest("GET", url, nil)
+	content, _, err := doRequest(http.MethodGet, url, nil, "", nil, 5*time.Second)
 	if err != nil {
+		fmt.Println(err)
 		return ""
 	}
-	resp, err := client.Do(req)
-	if err != nil {
-		// 需要错误日志的处理
-		// logger.Error(error)
-		return ""
-		// panic(error)
-	}
-	defer resp.Body.Close()
-	var buffer [512]byte
-	result := bytes.NewBuffer(nil)
-	for {
-		n, err := resp.Body.Read(buffer[0:])
-		result.Write(buffer[0:n])
-		if err != nil && err == io.EOF {
-			break
-		} else if err != nil {
-			// logger.Error(err)
-			return ""
-			//	panic(err)
-		}
-	}
-	response = result.String()
-	return
+	return content
 }
 
-// 发送POST请求
-// url:请求地址，data:POST请求提交的数据,contentType:请求体格式，如：application/json
-// content:请求放回的内容
+// Post sends a POST request.
+// url: request address
+// data: POST body
+// contentType: e.g. "application/json"
+// head: optional request headers
 func Post(url string, data []byte, contentType string, head map[string]string) (content string) {
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
-	req.Header.Add("content-type", contentType)
-	for k, v := range head {
-		req.Header.Add(k, v)
-	}
+	result, _, err := doRequest(http.MethodPost, url, data, contentType, head, 5*time.Second)
 	if err != nil {
+		fmt.Println(err)
+		return ""
+	}
+	return result
+}
+
+// ZeroTierGet sends a GET request and also returns the HTTP status code,
+// since callers need to distinguish "empty body" from "request failed".
+func ZeroTierGet(url string, head map[string]string) (content string, code int) {
+	result, statusCode, err := doRequest(http.MethodGet, url, nil, "", head, 20*time.Second)
+	if err != nil {
+		fmt.Println(err)
+		return "", 0
+	}
+	return result, statusCode
+}
+
+// OasisGet fetches an auth token and then performs a GET request with it.
+// Unlike the original version, a failed token fetch is surfaced instead of
+// silently proceeding with an empty Authorization header.
+func OasisGet(url string) (response string) {
+	tokenResp, _, err := doRequest(http.MethodGet, config.ServerInfo.ServerApi+"/token", nil, "", nil, 30*time.Second)
+	if err != nil {
+		fmt.Println(fmt.Errorf("httper: fetching token failed: %w", err))
 		return ""
 	}
 
-	client := &http.Client{Timeout: 5 * time.Second}
-	resp, error := client.Do(req)
-	if error != nil {
-		fmt.Println(error)
-		return
-	}
-	defer resp.Body.Close()
-
-	result, _ := ioutil.ReadAll(resp.Body)
-	content = string(result)
-	return
-}
-
-// 发送POST请求
-// url:请求地址，data:POST请求提交的数据,contentType:请求体格式，如：application/json
-// content:请求放回的内容
-func ZeroTierGet(url string, head map[string]string) (content string, code int) {
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	for k, v := range head {
-		req.Header.Add(k, v)
-	}
-	if err != nil {
-		return "", 0
+	token := gjson.Get(tokenResp, "data").String()
+	if token == "" {
+		fmt.Println("httper: token response did not contain a 'data' field")
+		return ""
 	}
 
-	client := &http.Client{Timeout: 20 * time.Second}
-	resp, error := client.Do(req)
-
-	if error != nil {
-		return "", 0
-	}
-	defer resp.Body.Close()
-	code = resp.StatusCode
-	result, _ := ioutil.ReadAll(resp.Body)
-	content = string(result)
-	return
-}
-
-// 发送GET请求
-// url:请求地址
-// response:请求返回的内容
-func OasisGet(url string) (response string) {
-	head := make(map[string]string)
-
-	t := make(chan string)
-
-	go func() {
-		str := Get(config.ServerInfo.ServerApi+"/token", nil)
-
-		t <- gjson.Get(str, "data").String()
-	}()
-	head["Authorization"] = <-t
-
+	head := map[string]string{"Authorization": token}
 	return Get(url, head)
 }
