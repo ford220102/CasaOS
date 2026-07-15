@@ -630,47 +630,58 @@ func extractHeaderFromData(data, boundary []byte, readTotal, boundaryLoc int) (m
 }
 
 // ============================================================
-// ParseFromHead parsuje nagłówek pliku z początku strumienia
+// findBoundaryInStream znajduje granicę i zwraca jej pozycję
 // ============================================================
-func ParseFromHead(readData []byte, readTotal int, boundary []byte, stream io.ReadCloser) (map[string]string, []byte, error) {
+func findBoundaryInStream(readData []byte, readTotal int, boundary []byte, stream io.ReadCloser) (int, int, error) {
 	buf := make([]byte, 1024*8)
-	foundBoundary := false
-	boundaryLoc := -1
 
 	for {
 		readLen, err := readStreamChunk(stream, buf)
 		if err != nil {
-			return nil, nil, err
+			return -1, readTotal, err
 		}
 		if readLen <= 0 {
-			break
+			return -1, readTotal, nil
 		}
 
 		if readTotal+readLen > cap(readData) {
-			return nil, nil, fmt.Errorf("not found boundary")
+			return -1, readTotal, fmt.Errorf("not found boundary")
 		}
 
 		copy(readData[readTotal:], buf[:readLen])
 		readTotal += readLen
 
-		if !foundBoundary {
-			boundaryLoc = locateBoundary(readData, boundary, readTotal)
-			if boundaryLoc == -1 {
-				continue
-			}
-			foundBoundary = true
-		}
-
-		headMap, remainingData, ok, err := extractHeaderFromData(readData, boundary, readTotal, boundaryLoc)
-		if err != nil {
-			return nil, nil, err
-		}
-		if ok {
-			return headMap, remainingData, nil
+		boundaryLoc := locateBoundary(readData, boundary, readTotal)
+		if boundaryLoc != -1 {
+			return boundaryLoc, readTotal, nil
 		}
 	}
+}
 
-	return nil, nil, fmt.Errorf("reach to stream EOF")
+// ============================================================
+// ParseFromHead parsuje nagłówek pliku z początku strumienia
+// ============================================================
+func ParseFromHead(readData []byte, readTotal int, boundary []byte, stream io.ReadCloser) (map[string]string, []byte, error) {
+	// Znajdź granicę
+	boundaryLoc, newReadTotal, err := findBoundaryInStream(readData, readTotal, boundary, stream)
+	if err != nil {
+		return nil, nil, err
+	}
+	if boundaryLoc == -1 {
+		return nil, nil, fmt.Errorf("reach to stream EOF")
+	}
+	readTotal = newReadTotal
+
+	// Wyodrębnij nagłówek
+	headMap, remainingData, ok, err := extractHeaderFromData(readData, boundary, readTotal, boundaryLoc)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !ok {
+		return nil, nil, fmt.Errorf("reach to stream EOF")
+	}
+
+	return headMap, remainingData, nil
 }
 
 // ============================================================
