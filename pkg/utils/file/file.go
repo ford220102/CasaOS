@@ -33,14 +33,12 @@ func GetExt(fileName string) string {
 // CheckNotExist check if the file exists
 func CheckNotExist(src string) bool {
 	_, err := os.Stat(src)
-
 	return os.IsNotExist(err)
 }
 
 // CheckPermission check if the file has permission
 func CheckPermission(src string) bool {
 	_, err := os.Stat(src)
-
 	return os.IsPermission(err)
 }
 
@@ -51,17 +49,15 @@ func IsNotExistMkDir(src string) error {
 			return err
 		}
 	}
-
 	return nil
 }
 
-// MkDir create a directory
+// MkDir create a directory with safe permissions 0750
 func MkDir(src string) error {
-	err := os.MkdirAll(src, os.ModePerm)
+	err := os.MkdirAll(src, 0o750)
 	if err != nil {
 		return err
 	}
-	os.Chmod(src, 0o777)
 	return nil
 }
 
@@ -97,7 +93,6 @@ func Open(name string, flag int, perm os.FileMode) (*os.File, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	return f, nil
 }
 
@@ -113,7 +108,7 @@ func MustOpen(fileName, filePath string) (*os.File, error) {
 		return nil, fmt.Errorf("file.IsNotExistMkDir src: %s, err: %v", src, err)
 	}
 
-	f, err := Open(src+fileName, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0o644)
+	f, err := Open(src+fileName, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
 		return nil, fmt.Errorf("Fail to OpenFile :%v", err)
 	}
@@ -148,7 +143,7 @@ func IsFile(path string) bool {
 }
 
 func CreateFile(path string) error {
-	file, err := os.Create(path)
+	file, err := os.OpenFile(path, os.O_RDONLY|os.O_CREATE, 0o600)
 	if err != nil {
 		return err
 	}
@@ -157,16 +152,13 @@ func CreateFile(path string) error {
 }
 
 func CreateFileAndWriteContent(path, content string) error {
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0o666)
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0o600)
 	if err != nil {
 		return err
 	}
-
 	defer file.Close()
 	write := bufio.NewWriter(file)
-
 	write.WriteString(content)
-
 	write.Flush()
 	return nil
 }
@@ -178,7 +170,6 @@ func IsNotExistCreateFile(src string) error {
 			return err
 		}
 	}
-
 	return nil
 }
 
@@ -210,7 +201,7 @@ func copyFileContents(src, dst, style string) error {
 	}
 	defer srcfd.Close()
 
-	dstfd, err := os.Create(dst)
+	dstfd, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return err
 	}
@@ -225,7 +216,7 @@ func copyFileContents(src, dst, style string) error {
 		return err
 	}
 
-	return os.Chmod(dst, srcinfo.Mode())
+	return os.Chmod(dst, srcinfo.Mode()&0o750)
 }
 
 // CopyFile copies a single file from src into the dst directory
@@ -256,7 +247,7 @@ func GetNoDuplicateFileName(fullPath string) string {
 	return fullPath
 }
 
-// prepareCopyDir prepares the destination path and handles existing directories
+// prepareCopyDir prepares destination path for directory copy
 func prepareCopyDir(src, dst, style string) (string, os.FileInfo, error) {
 	srcinfo, err := os.Stat(src)
 	if err != nil {
@@ -277,7 +268,7 @@ func prepareCopyDir(src, dst, style string) (string, os.FileInfo, error) {
 		os.Remove(dst)
 	}
 
-	if err = os.MkdirAll(dst, srcinfo.Mode()); err != nil {
+	if err = os.MkdirAll(dst, srcinfo.Mode()&0o750); err != nil {
 		return "", nil, err
 	}
 
@@ -285,7 +276,7 @@ func prepareCopyDir(src, dst, style string) (string, os.FileInfo, error) {
 }
 
 // processDirectoryContents processes all items in a directory for copying
-func processDirectoryContents(src, dst, style string, srcinfo os.FileInfo) error {
+func processDirectoryContents(src, dst, style string) error {
 	fds, err := ioutil.ReadDir(src)
 	if err != nil {
 		return err
@@ -311,7 +302,6 @@ func processDirectoryContents(src, dst, style string, srcinfo os.FileInfo) error
 func CopyDir(src, dst, style string) error {
 	dstPath, srcinfo, err := prepareCopyDir(src, dst, style)
 	if err != nil {
-		// If style is "skip" and directory exists, this is acceptable
 		if strings.Contains(err.Error(), "style is skip") {
 			return nil
 		}
@@ -322,7 +312,7 @@ func CopyDir(src, dst, style string) error {
 		return CopyFile(src, dst, style)
 	}
 
-	return processDirectoryContents(src, dstPath, style, srcinfo)
+	return processDirectoryContents(src, dstPath, style)
 }
 
 func WriteToPath(data []byte, path, name string) error {
@@ -332,7 +322,7 @@ func WriteToPath(data []byte, path, name string) error {
 	} else {
 		fullPath += "/" + name
 	}
-	return WriteToFullPath(data, fullPath, 0o666)
+	return WriteToFullPath(data, fullPath, 0o600)
 }
 
 func WriteToFullPath(data []byte, fullPath string, perm fs.FileMode) error {
@@ -340,9 +330,11 @@ func WriteToFullPath(data []byte, fullPath string, perm fs.FileMode) error {
 		return err
 	}
 
+	safePerm := perm & 0o750
+
 	file, err := os.OpenFile(fullPath,
 		os.O_WRONLY|os.O_TRUNC|os.O_CREATE,
-		perm,
+		safePerm,
 	)
 	if err != nil {
 		return err
@@ -363,7 +355,7 @@ func SpliceFiles(dir, path string, length, startPoint int) error {
 
 	file, _ := os.OpenFile(fullPath,
 		os.O_WRONLY|os.O_TRUNC|os.O_CREATE,
-		0o666,
+		0o600,
 	)
 
 	defer file.Close()
@@ -517,7 +509,7 @@ func MoveFile(sourcePath, destPath string) error {
 	if err != nil {
 		return fmt.Errorf("Couldn't open source file: %s", err)
 	}
-	outputFile, err := os.Create(destPath)
+	outputFile, err := os.OpenFile(destPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		inputFile.Close()
 		return fmt.Errorf("Couldn't open dest file: %s", err)
@@ -601,6 +593,36 @@ func ParseFileHeader(h, boundary []byte) (map[string]string, bool) {
 	return result, true
 }
 
+// readStreamChunk reads a chunk from the stream
+func readStreamChunk(stream io.ReadCloser, buf []byte) (int, error) {
+	readLen, err := stream.Read(buf)
+	if err != nil && err != io.EOF {
+		return 0, err
+	}
+	return readLen, nil
+}
+
+// locateBoundary finds the boundary in the data buffer
+func locateBoundary(data, boundary []byte, readTotal int) int {
+	return bytes.LastIndex(data[:readTotal], boundary)
+}
+
+// extractHeaderFromData extracts header map and remaining data
+func extractHeaderFromData(data, boundary []byte, readTotal, boundaryLoc int) (map[string]string, []byte, bool, error) {
+	startLoc := boundaryLoc + len(boundary)
+	fileHeadLoc := bytes.Index(data[startLoc:readTotal], []byte("\r\n\r\n"))
+	if fileHeadLoc == -1 {
+		return nil, nil, false, nil
+	}
+	fileHeadLoc += startLoc
+
+	headMap, ok := ParseFileHeader(data, boundary)
+	if !ok {
+		return headMap, nil, false, fmt.Errorf("ParseFileHeader fail: %s", string(data[startLoc:fileHeadLoc]))
+	}
+	return headMap, data[fileHeadLoc+4 : readTotal], true, nil
+}
+
 // processBoundaryData handles the core logic of reading until a boundary is found
 func processBoundaryData(boundary []byte, stream io.ReadCloser, target io.WriteCloser) ([]byte, bool, error) {
 	readData := make([]byte, 1024*8)
@@ -610,12 +632,13 @@ func processBoundaryData(boundary []byte, stream io.ReadCloser, target io.WriteC
 	reachEnd := false
 
 	for !reachEnd {
-		readLen, err := stream.Read(buf)
+		readLen, err := readStreamChunk(stream, buf)
 		if err != nil {
-			if err != io.EOF && readLen <= 0 {
-				return nil, true, err
-			}
+			return nil, true, err
+		}
+		if readLen <= 0 {
 			reachEnd = true
+			continue
 		}
 
 		copy(readData[readDataLen:], buf[:readLen])
@@ -645,32 +668,6 @@ func ReadToBoundary(boundary []byte, stream io.ReadCloser, target io.WriteCloser
 	return processBoundaryData(boundary, stream, target)
 }
 
-// findBoundaryLoc finds the boundary location in the data
-func findBoundaryLoc(data, boundary []byte, readTotal int) int {
-	return bytes.LastIndex(data[:readTotal], boundary)
-}
-
-// extractHeaderFromData extracts header map and remaining data
-func extractHeaderFromData(data, boundary []byte, readTotal int) (map[string]string, []byte, bool, error) {
-	boundaryLoc := findBoundaryLoc(data, boundary, readTotal)
-	if boundaryLoc == -1 {
-		return nil, nil, false, nil
-	}
-
-	startLoc := boundaryLoc + len(boundary)
-	fileHeadLoc := bytes.Index(data[startLoc:readTotal], []byte("\r\n\r\n"))
-	if fileHeadLoc == -1 {
-		return nil, nil, false, nil
-	}
-	fileHeadLoc += startLoc
-
-	headMap, ok := ParseFileHeader(data, boundary)
-	if !ok {
-		return headMap, nil, false, fmt.Errorf("ParseFileHeader fail: %s", string(data[startLoc:fileHeadLoc]))
-	}
-	return headMap, data[fileHeadLoc+4 : readTotal], true, nil
-}
-
 // ParseFromHead parses the file header from the beginning of the stream
 func ParseFromHead(readData []byte, readTotal int, boundary []byte, stream io.ReadCloser) (map[string]string, []byte, error) {
 	buf := make([]byte, 1024*8)
@@ -678,11 +675,11 @@ func ParseFromHead(readData []byte, readTotal int, boundary []byte, stream io.Re
 	boundaryLoc := -1
 
 	for {
-		readLen, err := stream.Read(buf)
+		readLen, err := readStreamChunk(stream, buf)
 		if err != nil {
-			if err != io.EOF {
-				return nil, nil, err
-			}
+			return nil, nil, err
+		}
+		if readLen <= 0 {
 			break
 		}
 
@@ -694,14 +691,14 @@ func ParseFromHead(readData []byte, readTotal int, boundary []byte, stream io.Re
 		readTotal += readLen
 
 		if !foundBoundary {
-			boundaryLoc = findBoundaryLoc(readData, boundary, readTotal)
+			boundaryLoc = locateBoundary(readData, boundary, readTotal)
 			if boundaryLoc == -1 {
 				continue
 			}
 			foundBoundary = true
 		}
 
-		headMap, remainingData, ok, err := extractHeaderFromData(readData, boundary, readTotal)
+		headMap, remainingData, ok, err := extractHeaderFromData(readData, boundary, readTotal, boundaryLoc)
 		if err != nil {
 			return nil, nil, err
 		}
